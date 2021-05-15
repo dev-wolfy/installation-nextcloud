@@ -17,22 +17,24 @@ export DEBIAN_FRONTEND=noninteractive
 # VARIABLES
 ###############################################################################
 
-nextcloud_version="21.0.1"
-document_root="/var/www/nextcloud/"
-nextcloud_ip="193.168.xxx.xxx"
-nextcloud_servername="cloud.server.fr"
-nextcloud_admin_username="username"
-nextcloud_admin_password="********"
-cert_method="openssl"
-#cert_method="letsencrypt"
-cert_email="admin@server.fr"
+#nextcloud_version="21.0.1"
+#document_root=""
+#nextcloud_ip=""
+#nextcloud_servername=""
+#nextcloud_admin_username=""
+#nextcloud_admin_password=""
+#cert_method="openssl"
+##cert_method="letsencrypt"
+#cert_email=""
+#
+#nextcloud_active_redis=1
+#
+#nextcloud_db_database=""
+#nextcloud_db_username=""
+#nextcloud_db_hostname=""
+#nextcloud_db_password=""
 
-nextcloud_active_redis=1
-
-nextcloud_db_database="name"
-nextcloud_db_username="username"
-nextcloud_db_hostname="localhost"
-nextcloud_db_password="*********"
+source ../vars.sh
 
 while [[ -z $nextcloud_db_password ]] ; do
 	echo -ne "\nMariaDB Nextcloud Password: "
@@ -195,18 +197,62 @@ function _VERIFY_PACKAGE_IS_INSTALLED()
 
 	if [ "$(dpkg-query -W -f='${Status}' "${package}" 2>/dev/null | grep -c "ok installed")" == "1" ]
 	then
-    		return 1
+    		echo 1
 	else
-		return 0
+		echo 0
 	fi
 }
 
 function _INSTALL_PACKAGES()
 {
-	packages="${@}"
-	for i in "${packages[@]}"; do
-		echo "${i}"
+	declare -a packages=${@}
+
+	declare -a packages_already_installed
+	declare -a packages_newly_installed
+
+	for package in ${packages} ; do
+
+		is_installed=$(_VERIFY_PACKAGE_IS_INSTALLED "${package}")
+
+		case ${is_installed} in
+                        0)
+                                packages_already_installed+=("${package}")    
+                                ;;
+                        1)
+                                packages_newly_installed+=("${package}")
+                                apt -yq install ${package}
+                                ;;
+                        *)
+                                echo "Erreur dans le retour de la fonction _VERIFY_PACKAGE_IS_INSTALLED pour le paquet ${package}"
+                                ;;
+		esac
 	done
+
+	neutre="\e[0;m"
+	if [[ ${#packages_newly_installed[@]} -gt 0 && ${#packages_already_installed[@]} -gt 0 ]] ; then
+
+		coloraddl="\e[0;32m"
+		coloraddb="\e[1;32m"
+		colorstayl="\e[0;34m"
+		colorstayb="\e[1;34m"
+		echo -e "[${coloraddb}+${neutre}]->${coloraddl} Ajout:${coloraddb} ${#packages_newly_installed[@]}${neutre}, ${colorstayl}Existe déjà:${colorstayb} ${#packages_already_installed[@]}${neutre}, Supprimé: 0, Erreur: 0 - nouveaux paquets: ${packages_newly_installed[@]}"
+
+	elif [[ ${#packages_newly_installed[@]} -gt 0 && ${#packages_already_installed[@]} -eq 0 ]] ; then
+
+		colorl="\e[0;32m"
+		colorb="\e[1;32m"
+		echo -e "[${colorb}+${neutre}]-> ${colorl} Ajout:${colorb} ${#packages_newly_installed[@]}${neutre}, Existe déjà: 0, Supprimé: 0, Erreur: 0 - Nouveaux paquets installés : ${packages_newly_installed[@]}"
+
+	elif [[ ${#packages_newly_installed[@]} -eq 0 && ${#packages_already_installed[@]} -gt 0 ]] ; then
+	
+		colorl="\e[0;34m"
+		colorb="\e[1;34m"
+		echo -e "[${colorb}.${neutre}]-> Ajout: 0, ${colorl}Existe déjà:${colorb} ${#packages_already_intalled[@]}${neutre}, Supprimé: 0, Erreur: 0 - Tous les paquets sont déjà installé"
+
+	else
+		echo -e "[X]-> Erreur dans la fonction APT"
+	fi
+
 }
 
 
@@ -221,15 +267,9 @@ apt -yqq -o=Dpkg::Use-Pty=0 update 1> /dev/null
 
 _PRINT_COMMAND_STATE 0 "apt update"
 
-utils=(apt-transport-https ca-certificates certbot curl libmagickcore-6.q16-6-extra lsb-release openssl python-certbot-apache unzip vim wget)
+utils=("apt-transport-https" "ca-certificates" "certbot" "curl" "libmagickcore-6.q16-6-extra" "lsb-release" "openssl" "python-certbot-apache" "unzip" "vim" "wget")
 
-apt -yqq install ${utils[@]}
-
-#apt -yqq -o=Dpkg::Use-Pty=0 install apt-transport-https ca-certificates certbot curl libmagickcore-6.q16-6-extra lsb-release openssl python-certbot-apache unzip vim wget 1> /dev/null
-
-
-
-_PRINT_COMMAND_STATE 0 "apt install apt-transport-ht..."
+_INSTALL_PACKAGES ${utils[@]}
 
 ###############################################################################
 # PHP
